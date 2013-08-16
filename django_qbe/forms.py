@@ -144,6 +144,7 @@ class BaseQueryByExampleFormSet(BaseFormSet):
         """
         selects = []
         froms = []
+        tables = set()
         wheres = []
         sorts = []
         params = []
@@ -173,16 +174,19 @@ class BaseQueryByExampleFormSet(BaseFormSet):
             sort = data["sort"]
             db_field = u"%s.%s" % (qn(model), qn(field))
             operator, over = criteria
-            is_join = operator.lower() == 'join'
+            is_join = operator.lower() in ('inner-join', 'outer-join')
             if show and not is_join:
                 selects.append(db_field)
             if sort:
                 sorts.append(db_field)
             if all(criteria):
+                table = qn(model)
+
                 if is_join:
                     over_split = over.lower().rsplit(".", 1)
-                    join_model = qn(over_split[0].replace(".", "_"))
+                    join_table = qn(over_split[0].replace(".", "_"))
                     join_field = qn(over_split[1])
+
                     if model in self._models:
                         _field = self._models[model]._meta.get_field(field)
                         # Backwards compatibility for Django 1.3
@@ -190,21 +194,40 @@ class BaseQueryByExampleFormSet(BaseFormSet):
                             _field_db_column = _field.db_column
                         else:
                             _field_db_column = _field.attname
-                        join = u"%s.%s = %s.%s" \
-                               % (join_model, join_field, qn(model),
-                                  qn(_field_db_column))
+                        join_on_field = qn(_field_db_column)
                     else:
-                        join = u"%s.%s = %s" \
-                               % (join_model, join_field,
-                                  u"%s_id" % db_field)
-                    if (join not in wheres
-                        and uqn(join_model) in self._db_table_names):
-                        wheres.append(join)
-                        if join_model not in froms:
-                            froms.append(join_model)
-                    # join_select = u"%s.%s" % (join_model, join_field)
-                    # if join_select not in selects:
-                    #     selects.append(join_select)
+                        join_on_field = "%s_id" % db_field
+
+                    if table in tables and join_table in tables:
+                        raise forms.ValidationError("Rejoining joined table")
+
+                    # Swap the tables if we're joining in a new table backwards
+                    elif join_table in tables and table not in tables:
+                        table, join_table = join_table, table
+                        join_field, join_on_field = join_on_field, join_field
+
+                if table not in tables and model in self._db_table_names:
+                    if len(froms) == 0:
+                        next_join = table
+                    else:
+                        next_join = "inner join %s" % table
+                    froms.append(next_join)
+                    tables.add(table)
+
+                if is_join:
+                    criterion = u"%s.%s = %s.%s" % \
+                                (join_table, join_field, table, join_on_field)
+
+                    if operator.lower() == 'inner-join':
+                        from_ = 'inner join %s on %s' % \
+                                (join_table, criterion)
+                    elif operator.lower() == 'outer-join':
+                        from_ = 'left outer join %s on %s' % \
+                                (join_table, criterion)
+
+                    froms.append(from_)
+                    tables.add(join_table)
+
                 elif operator in self._db_operators:
                     # db_operator = self._db_operators[operator] % over
                     db_operator = self._db_operators[operator]
@@ -213,8 +236,7 @@ class BaseQueryByExampleFormSet(BaseFormSet):
                     wheres.append(u"%s %s" \
                                   % (lookup_cast(operator) % db_field,
                                      db_operator))
-            if qn(model) not in froms and model in self._db_table_names:
-                froms.append(qn(model))
+
         return selects, froms, wheres, sorts, params
 
     def get_raw_query(self, limit=None, offset=None, count=False,
@@ -250,7 +272,7 @@ class BaseQueryByExampleFormSet(BaseFormSet):
                 pass
         sql = u"""SELECT %s FROM %s %s %s %s %s;""" \
               % (", ".join(selects),
-                 ", ".join(self._froms),
+                 "\n".join(self._froms),
                  wheres,
                  order_by,
                  limits,
