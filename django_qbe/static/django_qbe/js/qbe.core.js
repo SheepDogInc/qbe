@@ -239,7 +239,7 @@ qbe.Core = function() {};
                         } else {
                             targetString = target.name +"."+ target.model +"."+ target.field;
                             $("#"+ domTo).val(targetString);
-                            $("#"+ domTo).prev().val("join");
+                            $("#"+ domTo).prev().val("inner-join");
                             qbe.Core.addRelationsFrom(targetString);
                         }
                     } else {

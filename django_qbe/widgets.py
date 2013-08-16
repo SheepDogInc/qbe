@@ -21,7 +21,8 @@ OPERATOR_CHOICES = (
     ('iregex', _('(i) matchs regex')),
     ('istartswith', _('(i) starts with')),
     ('endswith', _('(i) ends with')),
-    ('join', _('joins to')),
+    ('inner-join', _('must join to')),
+    ('outer-join', _('may join to')),
 )
 
 
