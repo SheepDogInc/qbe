@@ -172,6 +172,7 @@ class BaseQueryByExampleFormSet(BaseFormSet):
             show = data["show"]
             criteria = data["criteria"]
             sort = data["sort"]
+            table = qn(model)
             db_field = u"%s.%s" % (qn(model), qn(field))
             operator, over = criteria
             is_join = operator.lower() in ('inner-join', 'outer-join')
@@ -179,41 +180,40 @@ class BaseQueryByExampleFormSet(BaseFormSet):
                 selects.append(db_field)
             if sort:
                 sorts.append(db_field)
+
+            if is_join:
+                over_split = over.lower().rsplit(".", 1)
+                join_table = qn(over_split[0].replace(".", "_"))
+                join_field = qn(over_split[1])
+
+                if model in self._models:
+                    _field = self._models[model]._meta.get_field(field)
+                    # Backwards compatibility for Django 1.3
+                    if hasattr(_field, "db_column") and _field.db_column:
+                        _field_db_column = _field.db_column
+                    else:
+                        _field_db_column = _field.attname
+                    join_on_field = qn(_field_db_column)
+                else:
+                    join_on_field = "%s_id" % db_field
+
+                if table in tables and join_table in tables:
+                    raise forms.ValidationError("Rejoining joined table")
+
+                # Swap the tables if we're joining in a new table backwards
+                elif join_table in tables and table not in tables:
+                    table, join_table = join_table, table
+                    join_field, join_on_field = join_on_field, join_field
+
+            if table not in tables and model in self._db_table_names:
+                if len(froms) == 0:
+                    next_join = table
+                else:
+                    next_join = "inner join %s" % table
+                froms.append(next_join)
+                tables.add(table)
+
             if all(criteria):
-                table = qn(model)
-
-                if is_join:
-                    over_split = over.lower().rsplit(".", 1)
-                    join_table = qn(over_split[0].replace(".", "_"))
-                    join_field = qn(over_split[1])
-
-                    if model in self._models:
-                        _field = self._models[model]._meta.get_field(field)
-                        # Backwards compatibility for Django 1.3
-                        if hasattr(_field, "db_column") and _field.db_column:
-                            _field_db_column = _field.db_column
-                        else:
-                            _field_db_column = _field.attname
-                        join_on_field = qn(_field_db_column)
-                    else:
-                        join_on_field = "%s_id" % db_field
-
-                    if table in tables and join_table in tables:
-                        raise forms.ValidationError("Rejoining joined table")
-
-                    # Swap the tables if we're joining in a new table backwards
-                    elif join_table in tables and table not in tables:
-                        table, join_table = join_table, table
-                        join_field, join_on_field = join_on_field, join_field
-
-                if table not in tables and model in self._db_table_names:
-                    if len(froms) == 0:
-                        next_join = table
-                    else:
-                        next_join = "inner join %s" % table
-                    froms.append(next_join)
-                    tables.add(table)
-
                 if is_join:
                     criterion = u"%s.%s = %s.%s" % \
                                 (join_table, join_field, table, join_on_field)
