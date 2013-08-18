@@ -157,7 +157,7 @@ qbe.Core = function() {};
          * Event triggered when the SELECT tag for fill models is changed
          */
         qbe.Core.fillModelsEvent = function() {
-            var appModel, key, fields, splits, appModelSplits, prefix, css, cssSplit, domTo, option, optFields, optPrimaries, optForeigns, optManies, style, value;
+            var appModel, i, key, fields, splits, appModelSplits, prefix, css, cssSplit, domTo, option, decoratedOptions, style, value;
             appModel = $(this).val();
             if (appModel) {
                 appModelSplits = appModel.split(".");
@@ -167,10 +167,7 @@ qbe.Core = function() {};
                 css = $(this).attr("class");
                 cssSplit = css.split("to:");
                 domTo = prefix +"-"+ cssSplit[cssSplit.length-1];
-                optFields = [];
-                optPrimaries = [];
-                optForeigns = [];
-                optManies = [];
+                decoratedOptions = [];
                 for(key in fields) {
                     // We can't jump fields with no target 'cause they are
                     // ManyToManyField and ForeignKey fields!
@@ -178,22 +175,26 @@ qbe.Core = function() {};
                     if (fields[key].type == "ForeignKey") {
                         style = "foreign";
                         option = '<option class="'+ style +'" value="'+ key +'">'+ value +'</option>';
-                        optForeigns.push(option);
                     } else if (fields[key].type == "ManyToManyField") {
                         style = "many";
                         option = '<option class="'+ style +'" value="'+ key +'">'+ value +'</option>';
-                        optManies.push(option);
                     } else if (fields[key].primary) {
                         style = "primary";
                         option = '<option class="'+ style +'" value="'+ key +'">'+ value +'</option>';
-                        optPrimaries.push(option);
                     } else {
                         style = "";
                         option = '<option class="'+ style +'" value="'+ key +'">'+ value +'</option>';
-                        optFields.push(option);
                     }
+                    decoratedOptions.push({"text": value, "option": option});
                 }
-                $("#"+ domTo).html('<option value="">*</option>' + optPrimaries.join("") + optForeigns.join("") + optManies.join("") + optFields.join(""));
+                decoratedOptions.sort(function(a, b) {
+                    return a.text.localeCompare(b.text);
+                });
+                options = [];
+                for(i = 0; i < decoratedOptions.length; i++) {
+                    options.push(decoratedOptions[i].option);
+                }
+                $("#"+ domTo).html('<option value="">*</option>' + options.join(""));
                 // We need to raise change event
                 $("#"+ domTo).change();
             }
