@@ -11,3 +11,4 @@
 /django_qbe.egg-info
 /admin.py
 /*.sh
+/dist
